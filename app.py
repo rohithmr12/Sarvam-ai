@@ -1,55 +1,24 @@
-# Import necessary libraries
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import chainlit as cl
-from chainlit.types import AskResponse
-from typing import List, Optional, Any
-import pandas as pd
-import lancedb
-import os
-from llama_index.core import VectorStoreIndex
-from llama_index.vector_stores.lancedb import LanceDBVectorStore
-from llama_index.llms.huggingface import HuggingFaceLLM
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.llms.ollama import Ollama
-from llama_index.core.agent.react import ReActAgent
-from llama_index.core.prompts import PromptTemplate
+import streamlit as st
+import requests
+import json
 
-# Import the IndexHandler class from your existing code
-from Vdb_handler import IndexHandler  # Replace 'your_module' with the actual module name
+API_URL = "http://localhost:8000"
 
-# Initialize FastAPI app
-app = FastAPI()
+st.title("Document Query System")
 
-# Initialize IndexHandler
-metadata = pd.DataFrame()  # Replace with your actual metadata
-index_handler = IndexHandler(metadata)
+uploaded_file = "iesc111.pdf"
 
-# Create query engine
-agent = index_handler.create_query_engine("vector_index")  # Replace "vector_index" with your actual table name
+query = st.text_input("Enter your query:")
 
-class Query(BaseModel):
-    text: str
-
-@app.post("/query")
-async def query(query: Query):
-    try:
-        response = await agent.aquery(query.text)
-        return {"response": str(response)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Chainlit interface
-@cl.on_chat_start
-async def start():
-    cl.user_session.set("agent", agent)
-
-@cl.on_message
-async def main(message: str):
-    agent = cl.user_session.get("agent")
-    response = await agent.aquery(message)
-    await cl.Message(content=str(response)).send()
-
-# Run the Chainlit app
-if __name__ == "__main__":
-    cl.run()
+if st.button("Submit Query"):
+    if query:
+        payload = json.dumps({"query": query})
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(f"{API_URL}/query", data=payload, headers=headers)
+        if response.status_code == 200:
+            result = response.json()["response"]
+            st.write("Response:", result)
+        else:
+            st.error(f"Error querying document: {response.text}")
+    else:
+        st.warning("Please enter a query.")

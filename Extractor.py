@@ -30,7 +30,6 @@ from io import BytesIO
 from PIL import Image
 from llama_index.core.tools import QueryEngineTool, ToolMetadata
 
-
 class DocumentExtractor:
     def __init__(self, filename, output_dir="/doc/"):
         self.filename = filename
@@ -40,58 +39,46 @@ class DocumentExtractor:
 
     def extract_metadata(self):
         elements = self.extract_elements()
-        if elements is None:
+        if not elements:
             return pd.DataFrame(columns=self.meta_columns)
 
         records = self.convert_to_dict(elements=elements)
         records_df = pd.DataFrame(records)
 
-        # Ensure required columns exist
-        required_columns = ["type", "text"]
-        for col in required_columns:
+        for col in self.meta_columns:
             if col not in records_df.columns:
                 records_df[col] = None
 
-        # Ensure metadata DataFrame is properly formed
         metadata = [ele.metadata.to_dict() for ele in elements if hasattr(ele, 'metadata')]
         metadata_df = pd.DataFrame(metadata)
 
-        # Concatenate records_df and metadata_df, removing duplicated columns
         df = pd.concat([records_df, metadata_df], axis=1)
         df = df.loc[:, ~df.columns.duplicated()]
-
-        # Add missing columns with NaN values if not present
-        for col in self.meta_columns:
-            if col not in df.columns:
-                df[col] = pd.NA
 
         return df
 
     def extract_elements(self):
-        if 'pdf' in self.filetype:
-            elements = self.extract_pdf()
-            for element in elements:
-                if hasattr(element, 'type') and element.type == "Image":
-                    image_path = element.metadata.get('image_path')
-            return elements
+        if self.filetype == 'pdf':
+            return self.extract_pdf()
         else:
-            print("Filetype not valid")
+            print(f"Unsupported filetype: {self.filetype}")
             return []
 
     def extract_pdf(self):
         try:
             return partition_pdf(
                 filename=self.filename,
-                strategy="hi_res",
+                strategy="ocr_only",
                 max_characters=2000,
                 new_after_n_chars=1500,
                 infer_table_structure=True,
-                extract_images_in_pdf=True,
+                extract_images_in_pdf=False,
             )
         except Exception as e:
             print(f"Error during PDF extraction: {e}")
             return []
 
-    def convert_to_dict(self, elements):
+    @staticmethod
+    def convert_to_dict(elements):
         from unstructured.staging.base import convert_to_dict
         return convert_to_dict(elements=elements)
